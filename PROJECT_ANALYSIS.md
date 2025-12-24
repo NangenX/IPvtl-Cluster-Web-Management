@@ -194,7 +194,7 @@ except Exception as e:
 
 #### 3.2.1 🔴 高优先级问题
 
-**问题 1: 配置不一致性**
+**问题 1: 配置不一致性** ✅ **已修复**
 ```python
 # app/main.py - 启动时加载一次
 servers = load_servers_from_config()
@@ -207,24 +207,26 @@ def load_servers() -> List[Server]:
 ```
 - ⚠️ **问题**: Poller 使用启动时的服务器列表，API 使用实时文件内容
 - 🔧 **影响**: 修改 servers.json 后，Poller 不会自动更新
-- 💡 **建议**: 
-  1. 短期：在 README 中明确说明需要重启服务
-  2. 长期：实现热更新机制或统一配置源
+- ✅ **解决方案**: 
+  1. 统一配置源：所有 API 端点从 `poller.servers` 获取服务器列表
+  2. 添加 `reload_servers()` 方法支持热更新
+  3. 新增 `POST /api/servers/reload` 端点允许运行时重载配置
+  4. 使用 `asyncio.Lock` 保证线程安全
 
-**问题 2: 缺乏日志系统**
+**问题 2: 缺乏日志系统** ✅ **已修复**
 ```python
 print(f"Fetching status from {url}")  # 遍布代码的 print 语句
 ```
 - ⚠️ **问题**: 无法控制日志级别和输出格式
 - 🔧 **影响**: 生产环境难以调试和监控
-- 💡 **建议**: 引入 Python logging 模块
-```python
-import logging
-logger = logging.getLogger(__name__)
-logger.info(f"Fetching status from {url}")
-```
+- ✅ **解决方案**: 
+  1. 创建 `app/logging_config.py` 统一日志配置
+  2. 使用 Python 标准 `logging` 模块
+  3. 支持从环境变量 `LOG_LEVEL` 读取日志级别
+  4. 替换所有 `print()` 语句为适当级别的 logger 调用
+  5. 日志格式包含时间戳、模块名、级别、消息
 
-**问题 3: 无认证机制**
+**问题 3: 无认证机制** ✅ **已修复**
 ```python
 app.add_middleware(
     CORSMiddleware,
@@ -234,29 +236,41 @@ app.add_middleware(
 ```
 - ⚠️ **问题**: API 完全开放，无访问控制
 - 🔧 **影响**: 任何人都可以调用重启接口
-- 💡 **建议**: 添加认证中间件（JWT、API Key 等）
+- ✅ **解决方案**: 
+  1. 添加 `app/security.py` 实现 API Key 认证
+  2. 在 `app/config.py` 添加 `API_KEY_ENABLED` 和 `API_KEY` 配置项
+  3. 为敏感操作端点添加认证依赖
+  4. 默认禁用认证，保持向后兼容
+  5. 在 README.md 中添加认证使用说明
 
 #### 3.2.2 🟡 中优先级问题
 
-**问题 4: 硬编码的等待时间**
+**问题 4: 硬编码的等待时间** ✅ **已修复**
 ```python
 await asyncio.sleep(0.5)  # 在 restart_channel 中硬编码
 ```
-- 💡 **建议**: 提取为配置项 `RESTART_DELAY_SECONDS`
+- ✅ **解决方案**: 添加 `RESTART_DELAY_SECONDS` 配置项到 `app/config.py`
 
-**问题 5: 错误处理过于宽泛**
+**问题 5: 错误处理过于宽泛** ✅ **已修复**
 ```python
 except Exception as e:  # 捕获所有异常
 ```
-- 💡 **建议**: 针对具体异常类型（`httpx.HTTPError`、`json.JSONDecodeError` 等）分别处理
+- ✅ **解决方案**: 
+  1. 创建 `app/exceptions.py` 定义自定义异常类
+  2. 区分具体异常类型（`httpx.TimeoutException`、`httpx.HTTPError`、`json.JSONDecodeError`）
+  3. 在 `app/main.py` 添加全局异常处理器
+  4. 记录详细的错误信息到日志
 
-**问题 6: 缺乏输入验证**
+**问题 6: 缺乏输入验证** ✅ **已修复**
 ```python
 @router.post("/api/servers/{server_id}/channels/{channel_id}/restart")
 async def post_restart_channel(server_id: str, channel_id: str):
     # 没有验证 channel_id 格式或是否存在
 ```
-- 💡 **建议**: 添加参数验证，防止注入攻击
+- ✅ **解决方案**: 
+  1. 使用 `re.match(r'^[a-zA-Z0-9_-]+$', channel_id)` 验证格式
+  2. 防止 URL 注入攻击
+  3. 添加有意义的错误提示
 
 #### 3.2.3 🟢 低优先级改进
 
@@ -1503,6 +1517,41 @@ kubectl delete deployment ipvtl-management-blue
 ---
 
 ## 11. 变更历史
+
+### v1.1 (2025-12-24)
+**修复内容:**
+- ✅ 实现结构化日志系统，替换所有 print() 语句
+  - 创建 `app/logging_config.py` 统一日志配置
+  - 支持从 `LOG_LEVEL` 环境变量控制日志级别
+  - 日志格式包含时间戳、模块名、级别、消息
+- ✅ 统一配置源，解决 Poller 与 API 配置不一致问题
+  - API 端点从 `poller.servers` 获取服务器列表
+  - 添加 `Poller.reload_servers()` 方法支持热更新
+  - 新增 `POST /api/servers/reload` 端点
+  - 使用 `asyncio.Lock` 保证线程安全
+- ✅ 添加可选的 API Key 认证机制
+  - 创建 `app/security.py` 实现认证逻辑
+  - 配置项 `API_KEY_ENABLED` 和 `API_KEY`
+  - 敏感端点（重启、重载）受保护
+  - 默认禁用，保持向后兼容
+- ✅ 提取硬编码配置项到 settings
+  - 添加 `RESTART_DELAY_SECONDS` 配置项
+- ✅ 改进异常处理，区分具体错误类型
+  - 创建 `app/exceptions.py` 自定义异常类
+  - 区分 `httpx.TimeoutException`、`httpx.HTTPError`、`json.JSONDecodeError`
+  - 添加全局异常处理器
+  - 详细的错误日志记录
+- ✅ 添加输入验证防止注入攻击
+  - 验证 `channel_id` 格式（正则表达式）
+  - 提供有意义的错误提示
+- ✅ 更新文档
+  - README.md 添加 API 认证使用指南
+  - 添加完整的配置参数表
+
+**技术改进:**
+- 代码质量提升：从 DEBUG 级日志到 ERROR 级错误处理
+- 安全性增强：输入验证 + 可选认证
+- 运维友好：支持热更新配置，无需重启
 
 ### v1.0 (2025-12-24)
 **创建者:** AI Analysis  

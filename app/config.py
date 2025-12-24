@@ -18,8 +18,11 @@ class Settings(BaseSettings):
     HTTPX_TIMEOUT_SECONDS: int = 5
     RESTART_STOP_TIMEOUT_SECONDS: int = 10
     RESTART_START_TIMEOUT_SECONDS: int = 10
+    RESTART_DELAY_SECONDS: float = 0.5
     SERVERS_CONFIG_PATH: str = "servers/servers.json"
     LOG_LEVEL: str = "info"
+    API_KEY_ENABLED: bool = False
+    API_KEY: str = ""
 
 
 def get_settings() -> Settings:

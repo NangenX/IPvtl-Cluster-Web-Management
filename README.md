@@ -62,20 +62,68 @@ uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
 - 调整参数: 可以通过环境变量覆盖 `app/config.py` 中的 Pydantic `Settings`（例如 `POLL_INTERVAL`、`POLL_CONCURRENCY` 等）。
 
 **API 概览**
-- `GET /api/servers` — 返回服务器列表（来自 `servers/servers.json`）。
+- `GET /api/servers` — 返回服务器列表（从 Poller 获取）。
 - `GET /api/servers/{server_id}/status` — 返回指定服务器的最新缓存状态（由 `Poller` 提供），包含 CPU 与通道信息。
-- `POST /api/servers/{server_id}/channels/{channel_id}/restart` — 对指定服务器的指定通道执行重启（先 stop 再 start）。
+- `POST /api/servers/{server_id}/channels/{channel_id}/restart` — 对指定服务器的指定通道执行重启（先 stop 再 start）。**需要认证**（如果启用）。
+- `POST /api/servers/reload` — 重新加载服务器配置文件，无需重启应用。**需要认证**（如果启用）。
+
+**API 认证（可选）**
+
+默认情况下，API 认证是关闭的，以保持向后兼容性。要启用 API Key 认证：
+
+1. 设置环境变量启用认证：
+```bash
+export API_KEY_ENABLED=true
+export API_KEY=your-secret-api-key-here
+```
+
+2. 在请求敏感操作时添加 `X-API-Key` 请求头：
+```bash
+# 重启通道示例
+curl -X POST http://localhost:8000/api/servers/1/channels/1/restart \
+  -H "X-API-Key: your-secret-api-key-here"
+
+# 重新加载服务器配置示例
+curl -X POST http://localhost:8000/api/servers/reload \
+  -H "X-API-Key: your-secret-api-key-here"
+```
+
+3. 需要认证的端点：
+   - `POST /api/servers/{server_id}/channels/{channel_id}/restart`
+   - `POST /api/servers/reload`
+
+如果认证失败，API 将返回 401 Unauthorized 错误。
 
 **设计与实现要点**
 - 使用 FastAPI 提供异步路由，结合 `httpx` 异步客户端实现对上游服务器的轮询与控制请求。
 - `Poller` 使用并发信号量限制同时进行的请求数，避免对被管理服务器造成过高压力。
+- 支持运行时重新加载服务器配置，无需重启应用（通过 `/api/servers/reload` 端点）。
+- 实现了结构化日志系统，支持通过 `LOG_LEVEL` 环境变量控制日志级别。
+- 可选的 API Key 认证机制保护敏感操作。
 - 前端为最小示例，便于快速替换为更复杂的 SPA 或运维控制台。
 
+**配置参数**
+
+所有配置项可通过环境变量覆盖：
+
+| 环境变量 | 默认值 | 说明 |
+|---------|-------|------|
+| `POLL_INTERVAL` | 10 | 轮询间隔（秒） |
+| `MAX_SERVERS` | 100 | 最大服务器数量 |
+| `POLL_CONCURRENCY` | 10 | 并发轮询数 |
+| `HTTPX_TIMEOUT_SECONDS` | 5 | HTTP 请求超时 |
+| `RESTART_STOP_TIMEOUT_SECONDS` | 10 | 停止通道超时 |
+| `RESTART_START_TIMEOUT_SECONDS` | 10 | 启动通道超时 |
+| `RESTART_DELAY_SECONDS` | 0.5 | 重启间隔延迟 |
+| `LOG_LEVEL` | info | 日志级别（debug/info/warning/error） |
+| `API_KEY_ENABLED` | false | 是否启用 API 认证 |
+| `API_KEY` | "" | API 密钥（启用认证时必需） |
+
 **调试与开发建议**
-- 日志: 目前代码中有若干 `print` 调试输出，可替换为标准日志记录（`logging`）并通过 `LOG_LEVEL` 控制。
-- 健壮性: 生产环境建议对跨域策略、认证与错误处理进行加强，避免开放所有来源与敏感操作无认证。
+- 日志: 已实现结构化日志系统，通过 `LOG_LEVEL` 环境变量控制详细程度。
+- 健壮性: 已添加输入验证、错误处理和可选的 API 认证。生产环境建议限制 CORS 允许的来源。
 
 **下一步（建议）**
-- 为 API 添加认证（例如 JWT 或 API key）。
 - 将前端重构为 React/Vue 应用并增加更详细的图形化监控。
 - 添加单元测试与集成测试覆盖关键逻辑（`Poller`、`manager`、API 路由）。
+- 为历史数据添加持久化存储（如时序数据库）。
