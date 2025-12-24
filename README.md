@@ -74,7 +74,3 @@ uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
 - 为 API 添加认证（例如 JWT 或 API key）。
 - 将前端重构为 React/Vue 应用并增加更详细的图形化监控。
 - 添加单元测试与集成测试覆盖关键逻辑（`Poller`、`manager`、API 路由）。
-
----
-
-如果你希望我把 README 内容再精简、翻译成英文，或把更多命令/部署示例加进去（例如 Docker、systemd、Azure/AWS 部署），告诉我你想要的目标环境，我会继续完善。 
