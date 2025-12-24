@@ -1,6 +1,8 @@
 this project all build by AI tools.
 # IPVTL Cluster Web Management
 
+English version: [README_en.md](README_en.md)
+
 这是一个最小化的 IPVTL 集群管理面板示例，基于 FastAPI 提供后端 API，前端使用简单的静态页面（位于 `frontend/index.html`）。
 
 **主要功能**
