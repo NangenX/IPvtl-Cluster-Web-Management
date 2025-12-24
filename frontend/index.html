@@ -1,0 +1,202 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>IPVTL 管理面板（最小示例）</title>
+    <style>
+      body{font-family:Arial;padding:12px;background:#fafafa;color:#222}
+      .server{border:1px solid #e6e6e6;padding:12px;margin-bottom:12px;border-radius:8px;background:#fff}
+      .server h3{margin:0 0 8px 0}
+      .controls{margin-bottom:8px}
+      .controls .button{margin-right:8px}
+      table{width:100%;border-collapse:collapse;background:transparent}
+      th,td{padding:8px;border:1px solid #eee;text-align:left;font-size:14px}
+      .badge{display:inline-block;padding:3px 8px;border-radius:12px;color:#fff;font-size:12px}
+      .badge.running{background:#28a745}
+      .badge.stopping{background:#ffc107;color:#222}
+      .badge.idle{background:#dc3545}
+      .badge.other{background:#6c757d}
+      .cpu-line{margin:6px 0;display:flex;align-items:center;gap:10px}
+      .cpu-bar{background:#f1f1f1;border-radius:8px;overflow:hidden;height:14px;width:240px}
+      .cpu-fill{height:100%;background:linear-gradient(90deg,#76c7c0,#4aa3ff);width:0%}
+      .button{padding:6px 10px;border-radius:4px;border:1px solid #cfcfcf;background:#fff;cursor:pointer}
+      .button.primary{background:#4aa3ff;color:#fff;border-color:#3b8edc}
+      .muted{color:#666;font-size:13px}
+    </style>
+  </head>
+  <body>
+    <h2>IPVTL 管理面板（示例）</h2>
+    <div id="servers"></div>
+
+    <script>
+      async function loadServers(){
+        const res = await fetch('/api/servers');
+        const servers = await res.json();
+        const el = document.getElementById('servers');
+        el.innerHTML = '';
+        for(const s of servers){
+          const container = document.createElement('div');
+          container.className = 'server';
+          container.innerHTML = `<h3>${s.name || s.id}</h3><div class="controls"><button id="toggle-${s.id}" class="button primary" onclick="toggleStatus('${s.id}')">查看状态</button><label style="margin-left:8px">自动刷新<select id="refresh-interval-${s.id}" style="margin-left:6px"><option value="0">关闭</option><option value="1">1s</option><option value="2" selected>2s</option><option value="5">5s</option></select></label><label style="margin-left:8px"><input id="autorefresh-${s.id}" type="checkbox"> 启用</label><span class="muted" style="margin-left:8px">ID: ${s.id}</span></div><div id="status-${s.id}"></div>`;
+          el.appendChild(container);
+        }
+      }
+
+      function statusBadge(status){
+        const raw = (status||'').toString().trim();
+        const s = raw.toLowerCase();
+        if(s === 'running') return `<span class="badge running">运行</span>`;
+        if(s === 'stopping' || s === 'stoping' || s === 'stopped') return `<span class="badge stopping">停止中</span>`;
+        if(s === 'idle') return `<span class="badge idle">空闲</span>`;
+        // fallback: 显示原始值（首字母大写）
+        const label = raw ? (raw.charAt(0).toUpperCase() + raw.slice(1)) : '未知';
+        return `<span class="badge other">${label}</span>`;
+      }
+
+      // 用于存放每个服务器的定时器 id
+      window._refreshTimers = window._refreshTimers || {};
+
+      async function viewStatus(id){
+        const res = await fetch(`/api/servers/${id}/status`);
+        if(!res.ok){ alert('无法获取状态'); return }
+        const data = await res.json();
+        const container = document.getElementById(`status-${id}`);
+
+        // CPU 显示：支持单值或数组（取数组最后一个数值）
+        let cpuPercent = 0;
+        if (Array.isArray(data.cpu)){
+          const nums = data.cpu.filter(x => typeof x === 'number' && !isNaN(x));
+          if (nums.length){
+            const sum = nums.reduce((a,b) => a + b, 0);
+            cpuPercent = sum / nums.length; // 各核平均值作为整体 CPU 使用率
+          } else {
+            cpuPercent = 0;
+          }
+        } else {
+          cpuPercent = (typeof data.cpu === 'number') ? data.cpu : (parseFloat(data.cpu) || 0);
+        }
+        const cpuDisplay = Math.round(cpuPercent);
+        let html = `<div class="cpu-line"><strong>CPU:</strong><div class="cpu-bar"><div class="cpu-fill" style="width:${Math.min(100,Math.max(0,cpuPercent))}%"></div></div><span class="muted">${cpuDisplay}%</span></div>`;
+
+        // 通道表格：兼容 c.state 或 c.status
+        // 辅助：清理通道名（处理后端返回字符串 'None'/'null' 等情况）和从 status 文本中推断 state
+        function cleanName(n, idx){
+          if(n === undefined || n === null) return `通道 ${idx + 1}`;
+          const s = String(n).trim();
+          if(!s) return `通道 ${idx + 1}`;
+          const low = s.toLowerCase();
+          if(low === 'none' || low === 'null' || low === 'undefined') return `通道 ${idx + 1}`;
+          return s;
+        }
+
+        function inferState(state, status){
+          const sRaw = (state ?? '').toString().trim();
+          if(sRaw) return sRaw;
+          const st = (status ?? '').toString();
+          const low = st.toLowerCase();
+          if(/running/.test(low)) return 'running';
+          if(/stop|stopping|stopped/.test(low)) return 'stopping';
+          if(/idle/.test(low)) return 'idle';
+          return '';
+        }
+        html += `<table><thead><tr><th style="width:48px">#</th><th>通道</th><th style="width:120px">状态</th><th style="width:120px">操作</th></tr></thead><tbody>`;
+        (data.channels || []).forEach((c, index) => {
+          const name = cleanName(c.name ?? c.id, index);
+          // state 用于显示状态徽章；若 state 缺失则尝试从 status 文本中推断
+          const inferred = inferState(c.state, c.status);
+          const stateVal = inferred || 'unknown';
+          const statusText = (c.status ?? '').toString();
+          const badge = statusBadge(stateVal);
+          const isRunning = String(stateVal).toLowerCase() === 'running';
+          const chanId = c.id || c.name || index;
+          const action = (!isRunning) ? `<button class="button" onclick="restart('${id}','${chanId}')">重启</button>` : '';
+          // 在通道列内显示 name 和 status 文本；状态列显示由 state 决定的徽章
+          const statusHtml = statusText ? `<div class="muted" style="margin-top:6px;font-size:13px;color:#555">${statusText}</div>` : '';
+          html += `<tr><td>${index + 1}</td><td>${name}${statusHtml}</td><td>${badge}</td><td>${action}</td></tr>`;
+        });
+        html += '</tbody></table>';
+
+        container.innerHTML = html;
+        container.dataset.expanded = 'true';
+      }
+
+      function startAutoRefresh(id){
+        const checkbox = document.getElementById(`autorefresh-${id}`);
+        const sel = document.getElementById(`refresh-interval-${id}`);
+        if(!checkbox || !sel) return;
+        const enabled = checkbox.checked;
+        const interval = parseInt(sel.value, 10) || 0;
+        // 清理已有
+        clearAutoRefresh(id);
+        if(enabled && interval > 0){
+          // 先立即刷新一次
+          viewStatus(id);
+          const tid = setInterval(() => viewStatus(id), interval * 1000);
+          window._refreshTimers[id] = tid;
+        }
+      }
+
+      function clearAutoRefresh(id){
+        const tid = window._refreshTimers[id];
+        if(tid){
+          clearInterval(tid);
+          delete window._refreshTimers[id];
+        }
+      }
+
+      function toggleStatus(id){
+        const container = document.getElementById(`status-${id}`);
+        const btn = document.getElementById(`toggle-${id}`);
+        if(!container) return;
+        const expanded = container.dataset.expanded === 'true';
+        if(expanded){
+          // 收起：清空内容并停止定时器
+          container.innerHTML = '';
+          container.dataset.expanded = 'false';
+          btn.textContent = '查看状态';
+          // 取消自动刷新
+          clearAutoRefresh(id);
+          // 同步关闭复选框
+          const checkbox = document.getElementById(`autorefresh-${id}`);
+          if(checkbox) checkbox.checked = false;
+        }else{
+          // 展开并立即加载
+          viewStatus(id);
+          btn.textContent = '收起状态';
+          // 绑定下拉与复选框事件，仅绑定一次
+          const checkbox = document.getElementById(`autorefresh-${id}`);
+          const sel = document.getElementById(`refresh-interval-${id}`);
+          if(checkbox && sel){
+            checkbox.onchange = () => {
+              if(checkbox.checked){
+                startAutoRefresh(id);
+              }else{
+                clearAutoRefresh(id);
+              }
+            };
+            sel.onchange = () => {
+              // 如果正在启用，重启定时器
+              if(checkbox.checked){
+                startAutoRefresh(id);
+              }
+            };
+          }
+        }
+      }
+
+      async function restart(serverId, channelId){
+        try{
+          const res = await fetch(`/api/servers/${serverId}/channels/${channelId}/restart`, {method:'POST'});
+          const r = await res.json();
+          alert('重启结果:\n' + JSON.stringify(r));
+          // 重启后刷新该服务器状态
+          viewStatus(serverId);
+        }catch(e){
+          alert('重启请求失败: ' + e);
+        }
+      }
+
+      loadServers();
+    </script>
+  </body>
+</html>
