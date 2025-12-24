@@ -2,6 +2,8 @@
 
 ## this project all build by AI tools.
 
+**📊 项目分析文档**: [PROJECT_ANALYSIS.md](PROJECT_ANALYSIS.md) - 全面的项目分析、优化建议和实施路线图
+
 English version: [README_en.md](README_en.md)
 
 这是一个最小化的 IPVTL 集群管理面板示例，基于 FastAPI 提供后端 API，前端使用简单的静态页面（位于 `frontend/index.html`）。

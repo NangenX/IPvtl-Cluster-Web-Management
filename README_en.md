@@ -2,6 +2,8 @@
 
 ## this project all build by AI tools.
 
+**📊 Project Analysis**: [PROJECT_ANALYSIS.md](PROJECT_ANALYSIS.md) - Comprehensive project analysis, optimization recommendations, and implementation roadmap (Chinese)
+
 This repository contains a minimal example of an IPVTL cluster management panel. The backend is implemented with FastAPI and the frontend is a simple static page located at `frontend/index.html`.
 
 Main features
