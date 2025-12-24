@@ -85,11 +85,12 @@ async def post_restart_channel(
     Requires authentication if API_KEY_ENABLED is True.
     """
     # Validate channel_id format to prevent injection
-    if not re.match(r'^[a-zA-Z0-9_-]+$', channel_id):
+    # Must start with alphanumeric to avoid command-line option confusion
+    if not re.match(r'^[a-zA-Z0-9][a-zA-Z0-9_-]*$', channel_id):
         logger.warning(f"Invalid channel_id format: {channel_id}")
         raise HTTPException(
             status_code=400,
-            detail="Invalid channel_id format. Only alphanumeric characters, hyphens, and underscores are allowed."
+            detail="Invalid channel_id format. Must start with alphanumeric character and contain only alphanumeric characters, hyphens, and underscores."
         )
     
     servers = get_servers_from_poller(request)

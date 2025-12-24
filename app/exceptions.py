@@ -9,7 +9,7 @@ information throughout the application.
 class IPvtlException(Exception):
     """Base exception class for all IPvtl-related errors."""
     
-    def __init__(self, message: str = "An error occurred"):
+    def __init__(self, message: str):
         self.message = message
         super().__init__(self.message)
 
