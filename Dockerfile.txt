@@ -1,0 +1,45 @@
+# 构建阶段
+FROM python:3.11-slim as builder
+
+WORKDIR /app
+
+# 安装依赖到虚拟环境
+RUN python -m venv /opt/venv
+ENV PATH="/opt/venv/bin:$PATH"
+
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+# 运行阶段
+FROM python:3.11-slim
+
+WORKDIR /app
+
+# 从构建阶段复制虚拟环境
+COPY --from=builder /opt/venv /opt/venv
+ENV PATH="/opt/venv/bin:$PATH"
+
+# 复制应用代码
+COPY app/ ./app/
+COPY frontend/ ./frontend/
+COPY servers/ ./servers/
+
+# 创建非 root 用户
+RUN useradd --create-home --shell /bin/bash appuser && \
+    chown -R appuser:appuser /app
+USER appuser
+
+# 环境变量
+ENV PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1 \
+    IPVTL_SERVERS_CONFIG_PATH=/app/servers/servers.json
+
+# 暴露端口
+EXPOSE 8000
+
+# 健康检查
+HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
+    CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')" || exit 1
+
+# 启动命令
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]

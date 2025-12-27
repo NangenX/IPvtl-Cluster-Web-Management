@@ -1,202 +1,732 @@
-<!doctype html>
-<html>
-  <head>
-    <meta charset="utf-8" />
-    <title>IPVTL 管理面板（最小示例）</title>
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>IPvtl Cluster Manager</title>
     <style>
-      body{font-family:Arial;padding:12px;background:#fafafa;color:#222}
-      .server{border:1px solid #e6e6e6;padding:12px;margin-bottom:12px;border-radius:8px;background:#fff}
-      .server h3{margin:0 0 8px 0}
-      .controls{margin-bottom:8px}
-      .controls .button{margin-right:8px}
-      table{width:100%;border-collapse:collapse;background:transparent}
-      th,td{padding:8px;border:1px solid #eee;text-align:left;font-size:14px}
-      .badge{display:inline-block;padding:3px 8px;border-radius:12px;color:#fff;font-size:12px}
-      .badge.running{background:#28a745}
-      .badge.stopping{background:#ffc107;color:#222}
-      .badge.idle{background:#dc3545}
-      .badge.other{background:#6c757d}
-      .cpu-line{margin:6px 0;display:flex;align-items:center;gap:10px}
-      .cpu-bar{background:#f1f1f1;border-radius:8px;overflow:hidden;height:14px;width:240px}
-      .cpu-fill{height:100%;background:linear-gradient(90deg,#76c7c0,#4aa3ff);width:0%}
-      .button{padding:6px 10px;border-radius:4px;border:1px solid #cfcfcf;background:#fff;cursor:pointer}
-      .button.primary{background:#4aa3ff;color:#fff;border-color:#3b8edc}
-      .muted{color:#666;font-size:13px}
+        :root {
+            --bg-primary: #0f172a;
+            --bg-secondary: #1e293b;
+            --bg-card: #334155;
+            --text-primary: #f1f5f9;
+            --text-secondary: #94a3b8;
+            --accent: #3b82f6;
+            --success: #22c55e;
+            --warning: #f59e0b;
+            --danger: #ef4444;
+        }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            min-height: 100vh;
+        }
+        .header {
+            background: var(--bg-secondary);
+            padding: 1rem 2rem;
+            border-bottom: 1px solid var(--bg-card);
+        }
+        .header-top {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 1rem;
+            margin-bottom: 1rem;
+        }
+        .header h1 { font-size: 1.5rem; font-weight: 600; }
+        .header-controls { display: flex; gap: 1rem; align-items: center; flex-wrap: wrap; }
+        
+        /* 全局统计栏 */
+        .global-stats {
+            display: flex;
+            gap: 2rem;
+            padding: 0.75rem 1rem;
+            background: var(--bg-card);
+            border-radius: 8px;
+            flex-wrap: wrap;
+        }
+        .global-stat {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+        .global-stat-icon { font-size: 1.2rem; }
+        .global-stat-value { font-size: 1.4rem; font-weight: 700; }
+        .global-stat-value.running { color: var(--success); }
+        .global-stat-value.idle { color: var(--text-secondary); }
+        .global-stat-value.stopping { color: var(--warning); }
+        .global-stat-label { font-size: 0.8rem; color: var(--text-secondary); }
+        
+        .control-group {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            background: var(--bg-card);
+            padding: 0.4rem 0.8rem;
+            border-radius: 6px;
+        }
+        .control-group label { font-size: 0.85rem; color: var(--text-secondary); }
+        .control-group select {
+            background: var(--bg-secondary);
+            color: var(--text-primary);
+            border: 1px solid var(--bg-card);
+            padding: 0.3rem 0.5rem;
+            border-radius: 4px;
+            font-size: 0.85rem;
+            cursor: pointer;
+        }
+        .status-dot {
+            width: 8px; height: 8px;
+            border-radius: 50%;
+            display: inline-block;
+            margin-right: 6px;
+        }
+        .status-dot.online { background: var(--success); }
+        .status-dot.offline { background: var(--danger); }
+        .status-dot.error { background: var(--warning); }
+        .container { padding: 2rem; max-width: 1600px; margin: 0 auto; }
+        .server-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(480px, 1fr));
+            gap: 1.5rem;
+            align-items: start; /* 卡片顶部对齐，不拉伸 */
+        }
+        .server-card {
+            background: var(--bg-secondary);
+            border-radius: 12px;
+            overflow: hidden;
+            border: 1px solid var(--bg-card);
+        }
+        .server-header {
+            padding: 1rem 1.25rem;
+            background: var(--bg-card);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .server-name { font-weight: 600; font-size: 1.1rem; }
+        .server-meta { color: var(--text-secondary); font-size: 0.85rem; }
+        .server-stats {
+            padding: 1rem 1.25rem;
+            display: flex;
+            gap: 1.5rem;
+            border-bottom: 1px solid var(--bg-card);
+            flex-wrap: wrap;
+            align-items: center;
+        }
+        .stat { text-align: center; min-width: 50px; }
+        .stat-value { font-size: 1.3rem; font-weight: 600; }
+        .stat-label { font-size: 0.7rem; color: var(--text-secondary); }
+        .stat-value.running { color: var(--success); }
+        .stat-value.idle { color: var(--text-secondary); }
+        .stat-value.stopping { color: var(--warning); }
+        .cpu-cores {
+            display: flex;
+            gap: 3px;
+            flex-wrap: wrap;
+            align-items: center;
+            flex: 1;
+        }
+        .cpu-core {
+            font-size: 0.65rem;
+            padding: 2px 4px;
+            background: var(--bg-card);
+            border-radius: 3px;
+            color: var(--text-secondary);
+        }
+        .cpu-core.high { background: rgba(239,68,68,0.3); color: var(--danger); }
+        .cpu-core.medium { background: rgba(245,158,11,0.3); color: var(--warning); }
+        .channels-section { border-top: 1px solid var(--bg-card); }
+        .channels-toggle {
+            width: 100%;
+            padding: 0.75rem 1.25rem;
+            background: transparent;
+            border: none;
+            color: var(--text-primary);
+            cursor: pointer;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            font-size: 0.9rem;
+        }
+        .channels-toggle:hover { background: rgba(255,255,255,0.05); }
+        .toggle-icon { transition: transform 0.2s; font-size: 0.8rem; }
+        .toggle-icon.expanded { transform: rotate(180deg); }
+        .channels-container {
+            display: none;
+            padding: 0.75rem;
+            background: rgba(0,0,0,0.2);
+            max-height: 500px;
+            overflow-y: auto;
+        }
+        .channels-container.show { display: block; }
+        .channels-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+            gap: 0.5rem;
+        }
+        .channel-card {
+            background: var(--bg-secondary);
+            border-radius: 8px;
+            padding: 0.6rem;
+            border: 1px solid var(--bg-card);
+            display: flex;
+            flex-direction: column;
+            gap: 0.4rem;
+        }
+        .channel-card-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .channel-id { font-weight: 600; font-size: 0.85rem; }
+        .channel-state {
+            font-size: 0.65rem;
+            padding: 0.15rem 0.4rem;
+            border-radius: 3px;
+            text-transform: uppercase;
+            font-weight: 500;
+        }
+        .channel-state.running { background: rgba(34,197,94,0.2); color: var(--success); }
+        .channel-state.idle { background: rgba(148,163,184,0.2); color: var(--text-secondary); }
+        .channel-state.stopping { background: rgba(245,158,11,0.2); color: var(--warning); }
+        .channel-status-text {
+            font-size: 0.7rem;
+            color: var(--text-secondary);
+            font-family: monospace;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            min-height: 1rem;
+        }
+        .channel-actions { display: flex; gap: 0.3rem; }
+        .channel-actions .btn { flex: 1; padding: 0.3rem; font-size: 0.7rem; }
+        .btn {
+            padding: 0.4rem 0.75rem;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 0.8rem;
+            transition: all 0.2s;
+            white-space: nowrap;
+        }
+        .btn-primary { background: var(--accent); color: white; }
+        .btn-primary:hover { background: #2563eb; }
+        .btn-danger { background: var(--danger); color: white; }
+        .btn-danger:hover { background: #dc2626; }
+        .btn-success { background: var(--success); color: white; }
+        .btn-success:hover { background: #16a34a; }
+        .btn-sm { padding: 0.25rem 0.5rem; font-size: 0.75rem; }
+        .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+        .loading { text-align: center; padding: 3rem; color: var(--text-secondary); }
+        .error-banner {
+            background: rgba(239,68,68,0.1);
+            border: 1px solid var(--danger);
+            color: var(--danger);
+            padding: 1rem;
+            border-radius: 8px;
+            margin-bottom: 1.5rem;
+        }
+        .refresh-btn {
+            background: transparent;
+            border: 1px solid var(--bg-card);
+            color: var(--text-secondary);
+            padding: 0.5rem 1rem;
+            border-radius: 6px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+        .refresh-btn:hover { background: var(--bg-card); }
+        .last-update { color: var(--text-secondary); font-size: 0.85rem; }
+        .server-error {
+            padding: 1rem;
+            color: var(--danger);
+            font-size: 0.85rem;
+            background: rgba(239,68,68,0.1);
+        }
+        .countdown { font-size: 0.75rem; color: var(--accent); min-width: 20px; }
+        @keyframes spin { to { transform: rotate(360deg); } }
+        .spinning { animation: spin 1s linear infinite; display: inline-block; }
+        @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.5; } }
+        .pulsing { animation: pulse 1.5s infinite; }
+        @media (max-width: 600px) {
+            .server-grid { grid-template-columns: 1fr; }
+            .channels-grid { grid-template-columns: repeat(2, 1fr); }
+            .header { padding: 1rem; }
+            .container { padding: 1rem; }
+            .global-stats { gap: 1rem; }
+        }
     </style>
-  </head>
-  <body>
-    <h2>IPVTL 管理面板（示例）</h2>
-    <div id="servers"></div>
+</head>
+<body>
+    <header class="header">
+        <div class="header-top">
+            <h1>🖥️ IPvtl Cluster Manager</h1>
+            <div class="header-controls">
+                <div class="control-group">
+                    <label data-i18n="language">语言:</label>
+                    <select id="langSelect" onchange="setLanguage(this.value)">
+                        <option value="zh">中文</option>
+                        <option value="en">English</option>
+                    </select>
+                </div>
+                <div class="control-group">
+                    <label data-i18n="autoRefresh">自动刷新:</label>
+                    <select id="refreshInterval" onchange="setRefreshInterval(this.value)">
+                        <option value="0" data-i18n="off">关闭</option>
+                        <option value="5">5s</option>
+                        <option value="10">10s</option>
+                        <option value="20" selected>20s</option>
+                        <option value="30">30s</option>
+                    </select>
+                    <span class="countdown" id="countdown"></span>
+                </div>
+                <span class="last-update" id="lastUpdate">-</span>
+                <button class="refresh-btn" onclick="refreshAll()">
+                    <span id="refreshIcon">🔄</span> <span data-i18n="refresh">刷新</span>
+                </button>
+            </div>
+        </div>
+        <div class="global-stats" id="globalStats">
+            <div class="global-stat">
+                <span class="global-stat-icon">🖥️</span>
+                <div>
+                    <div class="global-stat-value" id="totalServers">0</div>
+                    <div class="global-stat-label" data-i18n="servers">服务器</div>
+                </div>
+            </div>
+            <div class="global-stat">
+                <span class="global-stat-icon">📺</span>
+                <div>
+                    <div class="global-stat-value" id="totalChannels">0</div>
+                    <div class="global-stat-label" data-i18n="totalChannels">总通道</div>
+                </div>
+            </div>
+            <div class="global-stat">
+                <span class="global-stat-icon">▶️</span>
+                <div>
+                    <div class="global-stat-value running" id="totalRunning">0</div>
+                    <div class="global-stat-label" data-i18n="running">运行中</div>
+                </div>
+            </div>
+            <div class="global-stat">
+                <span class="global-stat-icon">⏸️</span>
+                <div>
+                    <div class="global-stat-value idle" id="totalIdle">0</div>
+                    <div class="global-stat-label" data-i18n="idle">空闲</div>
+                </div>
+            </div>
+            <div class="global-stat" id="globalStoppingWrap" style="display:none;">
+                <span class="global-stat-icon">⏹️</span>
+                <div>
+                    <div class="global-stat-value stopping" id="totalStopping">0</div>
+                    <div class="global-stat-label" data-i18n="stopping">停止中</div>
+                </div>
+            </div>
+        </div>
+    </header>
+    <div class="container">
+        <div id="error" class="error-banner" style="display:none;"></div>
+        <div id="loading" class="loading" data-i18n="loading">加载中...</div>
+        <div id="serverGrid" class="server-grid"></div>
+    </div>
 
     <script>
-      async function loadServers(){
-        const res = await fetch('/api/servers');
-        const servers = await res.json();
-        const el = document.getElementById('servers');
-        el.innerHTML = '';
-        for(const s of servers){
-          const container = document.createElement('div');
-          container.className = 'server';
-          container.innerHTML = `<h3>${s.name || s.id}</h3><div class="controls"><button id="toggle-${s.id}" class="button primary" onclick="toggleStatus('${s.id}')">查看状态</button><label style="margin-left:8px">自动刷新<select id="refresh-interval-${s.id}" style="margin-left:6px"><option value="0">关闭</option><option value="1">1s</option><option value="2" selected>2s</option><option value="5">5s</option></select></label><label style="margin-left:8px"><input id="autorefresh-${s.id}" type="checkbox"> 启用</label><span class="muted" style="margin-left:8px">ID: ${s.id}</span></div><div id="status-${s.id}"></div>`;
-          el.appendChild(container);
+        // ==================== 国际化 ====================
+        const i18n = {
+            zh: {
+                language: '语言:',
+                autoRefresh: '自动刷新:',
+                off: '关闭',
+                refresh: '刷新',
+                loading: '加载中...',
+                noServers: '暂无服务器配置',
+                servers: '服务器',
+                totalChannels: '总通道',
+                running: '运行中',
+                idle: '空闲',
+                stopping: '停止中',
+                cpu: 'CPU',
+                channels: '通道数',
+                channelList: '通道列表',
+                noChannels: '无通道',
+                serverOffline: '服务器离线',
+                updatedAt: '更新于',
+                confirmRestart: '确认重启 Channel {0}?',
+                confirmStop: '确认停止 Channel {0}?',
+                fetchError: '获取服务器列表失败',
+                refreshError: '刷新失败',
+                actionError: '操作失败',
+                start: '启',
+                stop: '停',
+                restart: '重启'
+            },
+            en: {
+                language: 'Lang:',
+                autoRefresh: 'Auto Refresh:',
+                off: 'Off',
+                refresh: 'Refresh',
+                loading: 'Loading...',
+                noServers: 'No servers configured',
+                servers: 'Servers',
+                totalChannels: 'Total Ch.',
+                running: 'Running',
+                idle: 'Idle',
+                stopping: 'Stopping',
+                cpu: 'CPU',
+                channels: 'Channels',
+                channelList: 'Channel List',
+                noChannels: 'No channels',
+                serverOffline: 'Server offline',
+                updatedAt: 'Updated at',
+                confirmRestart: 'Confirm restart Channel {0}?',
+                confirmStop: 'Confirm stop Channel {0}?',
+                fetchError: 'Failed to fetch servers',
+                refreshError: 'Refresh failed',
+                actionError: 'Action failed',
+                start: 'On',
+                stop: 'Off',
+                restart: 'Restart'
+            }
+        };
+
+        let currentLang = localStorage.getItem('lang') || 'en';
+
+        function t(key, ...args) {
+            let text = i18n[currentLang][key] || key;
+            args.forEach((arg, i) => {
+                text = text.replace(`{${i}}`, arg);
+            });
+            return text;
         }
-      }
 
-      function statusBadge(status){
-        const raw = (status||'').toString().trim();
-        const s = raw.toLowerCase();
-        if(s === 'running') return `<span class="badge running">运行</span>`;
-        if(s === 'stopping' || s === 'stoping' || s === 'stopped') return `<span class="badge stopping">停止中</span>`;
-        if(s === 'idle') return `<span class="badge idle">空闲</span>`;
-        // fallback: 显示原始值（首字母大写）
-        const label = raw ? (raw.charAt(0).toUpperCase() + raw.slice(1)) : '未知';
-        return `<span class="badge other">${label}</span>`;
-      }
-
-      // 用于存放每个服务器的定时器 id
-      window._refreshTimers = window._refreshTimers || {};
-
-      async function viewStatus(id){
-        const res = await fetch(`/api/servers/${id}/status`);
-        if(!res.ok){ alert('无法获取状态'); return }
-        const data = await res.json();
-        const container = document.getElementById(`status-${id}`);
-
-        // CPU 显示：支持单值或数组（取数组最后一个数值）
-        let cpuPercent = 0;
-        if (Array.isArray(data.cpu)){
-          const nums = data.cpu.filter(x => typeof x === 'number' && !isNaN(x));
-          if (nums.length){
-            const sum = nums.reduce((a,b) => a + b, 0);
-            cpuPercent = sum / nums.length; // 各核平均值作为整体 CPU 使用率
-          } else {
-            cpuPercent = 0;
-          }
-        } else {
-          cpuPercent = (typeof data.cpu === 'number') ? data.cpu : (parseFloat(data.cpu) || 0);
-        }
-        const cpuDisplay = Math.round(cpuPercent);
-        let html = `<div class="cpu-line"><strong>CPU:</strong><div class="cpu-bar"><div class="cpu-fill" style="width:${Math.min(100,Math.max(0,cpuPercent))}%"></div></div><span class="muted">${cpuDisplay}%</span></div>`;
-
-        // 通道表格：兼容 c.state 或 c.status
-        // 辅助：清理通道名（处理后端返回字符串 'None'/'null' 等情况）和从 status 文本中推断 state
-        function cleanName(n, idx){
-          if(n === undefined || n === null) return `通道 ${idx + 1}`;
-          const s = String(n).trim();
-          if(!s) return `通道 ${idx + 1}`;
-          const low = s.toLowerCase();
-          if(low === 'none' || low === 'null' || low === 'undefined') return `通道 ${idx + 1}`;
-          return s;
+        function setLanguage(lang) {
+            currentLang = lang;
+            localStorage.setItem('lang', lang);
+            document.documentElement.lang = lang === 'zh' ? 'zh-CN' : 'en';
+            updateStaticTexts();
+            renderServers();
         }
 
-        function inferState(state, status){
-          const sRaw = (state ?? '').toString().trim();
-          if(sRaw) return sRaw;
-          const st = (status ?? '').toString();
-          const low = st.toLowerCase();
-          if(/running/.test(low)) return 'running';
-          if(/stop|stopping|stopped/.test(low)) return 'stopping';
-          if(/idle/.test(low)) return 'idle';
-          return '';
+        function updateStaticTexts() {
+            document.querySelectorAll('[data-i18n]').forEach(el => {
+                const key = el.getAttribute('data-i18n');
+                el.textContent = t(key);
+            });
         }
-        html += `<table><thead><tr><th style="width:48px">#</th><th>通道</th><th style="width:120px">状态</th><th style="width:120px">操作</th></tr></thead><tbody>`;
-        (data.channels || []).forEach((c, index) => {
-          const name = cleanName(c.name ?? c.id, index);
-          // state 用于显示状态徽章；若 state 缺失则尝试从 status 文本中推断
-          const inferred = inferState(c.state, c.status);
-          const stateVal = inferred || 'unknown';
-          const statusText = (c.status ?? '').toString();
-          const badge = statusBadge(stateVal);
-          const isRunning = String(stateVal).toLowerCase() === 'running';
-          const chanId = c.id || c.name || index;
-          const action = (!isRunning) ? `<button class="button" onclick="restart('${id}','${chanId}')">重启</button>` : '';
-          // 在通道列内显示 name 和 status 文本；状态列显示由 state 决定的徽章
-          const statusHtml = statusText ? `<div class="muted" style="margin-top:6px;font-size:13px;color:#555">${statusText}</div>` : '';
-          html += `<tr><td>${index + 1}</td><td>${name}${statusHtml}</td><td>${badge}</td><td>${action}</td></tr>`;
-        });
-        html += '</tbody></table>';
 
-        container.innerHTML = html;
-        container.dataset.expanded = 'true';
-      }
+        // ==================== 状态管理 ====================
+        let servers = [];
+        let refreshTimer = null;
+        let countdownTimer = null;
+        let countdownValue = 0;
+        let currentInterval = 20;
+        const pendingActions = new Set();
+        const expandedServers = new Set();
 
-      function startAutoRefresh(id){
-        const checkbox = document.getElementById(`autorefresh-${id}`);
-        const sel = document.getElementById(`refresh-interval-${id}`);
-        if(!checkbox || !sel) return;
-        const enabled = checkbox.checked;
-        const interval = parseInt(sel.value, 10) || 0;
-        // 清理已有
-        clearAutoRefresh(id);
-        if(enabled && interval > 0){
-          // 先立即刷新一次
-          viewStatus(id);
-          const tid = setInterval(() => viewStatus(id), interval * 1000);
-          window._refreshTimers[id] = tid;
+        // ==================== 数据获取 ====================
+        async function fetchServers() {
+            try {
+                const resp = await fetch('/api/servers');
+                if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+                servers = await resp.json();
+                updateGlobalStats();
+                renderServers();
+                hideError();
+                updateTimestamp();
+            } catch (e) {
+                showError(`${t('fetchError')}: ${e.message}`);
+            } finally {
+                document.getElementById('loading').style.display = 'none';
+            }
         }
-      }
 
-      function clearAutoRefresh(id){
-        const tid = window._refreshTimers[id];
-        if(tid){
-          clearInterval(tid);
-          delete window._refreshTimers[id];
+        // ==================== 全局统计 ====================
+        function updateGlobalStats() {
+            let totalChannels = 0, running = 0, idle = 0, stopping = 0;
+            
+            servers.forEach(s => {
+                if (s.state.status === 'online') {
+                    const channels = s.state.channels || [];
+                    totalChannels += channels.length;
+                    channels.forEach(ch => {
+                        if (ch.state === 'running') running++;
+                        else if (ch.state === 'idle') idle++;
+                        else if (ch.state === 'stopping') stopping++;
+                    });
+                }
+            });
+
+            document.getElementById('totalServers').textContent = servers.length;
+            document.getElementById('totalChannels').textContent = totalChannels;
+            document.getElementById('totalRunning').textContent = running;
+            document.getElementById('totalIdle').textContent = idle;
+            document.getElementById('totalStopping').textContent = stopping;
+            document.getElementById('globalStoppingWrap').style.display = 
+                stopping > 0 ? 'flex' : 'none';
         }
-      }
 
-      function toggleStatus(id){
-        const container = document.getElementById(`status-${id}`);
-        const btn = document.getElementById(`toggle-${id}`);
-        if(!container) return;
-        const expanded = container.dataset.expanded === 'true';
-        if(expanded){
-          // 收起：清空内容并停止定时器
-          container.innerHTML = '';
-          container.dataset.expanded = 'false';
-          btn.textContent = '查看状态';
-          // 取消自动刷新
-          clearAutoRefresh(id);
-          // 同步关闭复选框
-          const checkbox = document.getElementById(`autorefresh-${id}`);
-          if(checkbox) checkbox.checked = false;
-        }else{
-          // 展开并立即加载
-          viewStatus(id);
-          btn.textContent = '收起状态';
-          // 绑定下拉与复选框事件，仅绑定一次
-          const checkbox = document.getElementById(`autorefresh-${id}`);
-          const sel = document.getElementById(`refresh-interval-${id}`);
-          if(checkbox && sel){
-            checkbox.onchange = () => {
-              if(checkbox.checked){
-                startAutoRefresh(id);
-              }else{
-                clearAutoRefresh(id);
-              }
+        // ==================== 自动刷新 ====================
+        function setRefreshInterval(seconds) {
+            currentInterval = parseInt(seconds);
+            clearInterval(refreshTimer);
+            clearInterval(countdownTimer);
+            
+            if (currentInterval > 0) {
+                countdownValue = currentInterval;
+                updateCountdown();
+                countdownTimer = setInterval(() => {
+                    countdownValue--;
+                    if (countdownValue <= 0) countdownValue = currentInterval;
+                    updateCountdown();
+                }, 1000);
+                refreshTimer = setInterval(fetchServers, currentInterval * 1000);
+            } else {
+                document.getElementById('countdown').textContent = '';
+            }
+        }
+
+        function updateCountdown() {
+            document.getElementById('countdown').textContent = 
+                currentInterval > 0 ? `${countdownValue}s` : '';
+        }
+
+        function updateTimestamp() {
+            document.getElementById('lastUpdate').textContent = 
+                `${t('updatedAt')} ${new Date().toLocaleTimeString()}`;
+            countdownValue = currentInterval;
+        }
+
+        // ==================== 渲染 ====================
+        function toggleChannels(serverId, event) {
+            if (event) event.stopPropagation();
+            if (expandedServers.has(serverId)) {
+                expandedServers.delete(serverId);
+            } else {
+                expandedServers.add(serverId);
+            }
+            // 只更新对应的服务器卡片，而非全部重新渲染
+            const container = document.querySelector(`[data-server-id="${serverId}"] .channels-container`);
+            const icon = document.querySelector(`[data-server-id="${serverId}"] .toggle-icon`);
+            if (container && icon) {
+                container.classList.toggle('show');
+                icon.classList.toggle('expanded');
+            }
+        }
+
+        function renderServers() {
+            const grid = document.getElementById('serverGrid');
+            if (servers.length === 0) {
+                grid.innerHTML = `<div class="loading">${t('noServers')}</div>`;
+                return;
+            }
+            grid.innerHTML = servers.map(s => renderServerCard(s)).join('');
+        }
+
+        function renderServerCard(server) {
+            const { config, state } = server;
+            const statusClass = state.status.toLowerCase();
+            const channels = state.channels || [];
+            const cpuCores = state.cpu_cores || [];
+            const cpuAvg = state.cpu_avg;
+            const isExpanded = expandedServers.has(config.id);
+            
+            const stats = {
+                running: channels.filter(c => c.state === 'running').length,
+                idle: channels.filter(c => c.state === 'idle').length,
+                stopping: channels.filter(c => c.state === 'stopping').length
             };
-            sel.onchange = () => {
-              // 如果正在启用，重启定时器
-              if(checkbox.checked){
-                startAutoRefresh(id);
-              }
-            };
-          }
+            
+            return `
+                <div class="server-card" data-server-id="${config.id}">
+                    <div class="server-header">
+                        <div>
+                            <div class="server-name">
+                                <span class="status-dot ${statusClass}"></span>
+                                ${esc(config.name)}
+                            </div>
+                            <div class="server-meta">${esc(config.host)}:${config.port}</div>
+                        </div>
+                        <button class="btn btn-primary btn-sm" onclick="refreshServer('${config.id}')">
+                            ${t('refresh')}
+                        </button>
+                    </div>
+                    ${state.status === 'online' ? `
+                        <div class="server-stats">
+                            <div class="stat">
+                                <div class="stat-value">${cpuAvg != null ? cpuAvg.toFixed(0) : '-'}%</div>
+                                <div class="stat-label">${t('cpu')}</div>
+                            </div>
+                            <div class="stat">
+                                <div class="stat-value">${channels.length}</div>
+                                <div class="stat-label">${t('channels')}</div>
+                            </div>
+                            <div class="stat">
+                                <div class="stat-value running">${stats.running}</div>
+                                <div class="stat-label">${t('running')}</div>
+                            </div>
+                            <div class="stat">
+                                <div class="stat-value idle">${stats.idle}</div>
+                                <div class="stat-label">${t('idle')}</div>
+                            </div>
+                            ${stats.stopping > 0 ? `
+                                <div class="stat">
+                                    <div class="stat-value stopping">${stats.stopping}</div>
+                                    <div class="stat-label">${t('stopping')}</div>
+                                </div>
+                            ` : ''}
+                            ${cpuCores.length > 0 ? `
+                                <div class="cpu-cores">
+                                    ${cpuCores.map((v, i) => `
+                                        <span class="cpu-core ${v > 80 ? 'high' : v > 50 ? 'medium' : ''}">
+                                            ${i}:${v}%
+                                        </span>
+                                    `).join('')}
+                                </div>
+                            ` : ''}
+                        </div>
+                        <div class="channels-section">
+                            <button class="channels-toggle" onclick="toggleChannels('${config.id}', event)">
+                                <span>📺 ${t('channelList')} (${channels.length})</span>
+                                <span class="toggle-icon ${isExpanded ? 'expanded' : ''}">▼</span>
+                            </button>
+                            <div class="channels-container ${isExpanded ? 'show' : ''}">
+                                ${channels.length > 0 ? `
+                                    <div class="channels-grid">
+                                        ${channels.map(ch => renderChannelCard(config.id, ch)).join('')}
+                                    </div>
+                                ` : `<div style="padding:1rem;color:var(--text-secondary);">${t('noChannels')}</div>`}
+                            </div>
+                        </div>
+                    ` : `
+                        <div class="server-error">
+                            ⚠️ ${state.error_message || t('serverOffline')}
+                        </div>
+                    `}
+                </div>
+            `;
         }
-      }
 
-      async function restart(serverId, channelId){
-        try{
-          const res = await fetch(`/api/servers/${serverId}/channels/${channelId}/restart`, {method:'POST'});
-          const r = await res.json();
-          alert('重启结果:\n' + JSON.stringify(r));
-          // 重启后刷新该服务器状态
-          viewStatus(serverId);
-        }catch(e){
-          alert('重启请求失败: ' + e);
+        function renderChannelCard(serverId, channel) {
+            const stateClass = channel.state.toLowerCase();
+            const actionKey = `${serverId}-${channel.id}`;
+            const isPending = pendingActions.has(actionKey);
+            
+            return `
+                <div class="channel-card">
+                    <div class="channel-card-header">
+                        <span class="channel-id">CH${channel.id}</span>
+                        <span class="channel-state ${stateClass} ${isPending ? 'pulsing' : ''}">
+                            ${channel.state}
+                        </span>
+                    </div>
+                    <div class="channel-status-text" title="${esc(channel.status || '')}">
+                        ${esc(channel.status) || '-'}
+                    </div>
+                    <div class="channel-actions">
+                        ${channel.state === 'running' ? `
+                            <button class="btn btn-danger" 
+                                    onclick="stopChannel('${serverId}', ${channel.id})"
+                                    ${isPending ? 'disabled' : ''}>${t('stop')}</button>
+                        ` : channel.state === 'idle' ? `
+                            <button class="btn btn-success" 
+                                    onclick="startChannel('${serverId}', ${channel.id})"
+                                    ${isPending ? 'disabled' : ''}>${t('start')}</button>
+                        ` : `
+                            <button class="btn" disabled>...</button>
+                        `}
+                        <button class="btn btn-primary" 
+                                onclick="restartChannel('${serverId}', ${channel.id})"
+                                ${isPending || channel.state === 'stopping' ? 'disabled' : ''}>
+                            ${t('restart')}
+                        </button>
+                    </div>
+                </div>
+            `;
         }
-      }
 
-      loadServers();
+        function esc(str) {
+            if (!str) return '';
+            return str.replace(/[&<>"']/g, m => ({
+                '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+            }[m]));
+        }
+
+        // ==================== 操作 ====================
+        async function refreshServer(serverId) {
+            try {
+                await fetch(`/api/servers/${serverId}/refresh`, { method: 'POST' });
+                await fetchServers();
+            } catch (e) {
+                showError(`${t('refreshError')}: ${e.message}`);
+            }
+        }
+
+        async function restartChannel(serverId, channelId) {
+            if (!confirm(t('confirmRestart', channelId))) return;
+            await channelAction(serverId, channelId, 'restart');
+        }
+
+        async function stopChannel(serverId, channelId) {
+            if (!confirm(t('confirmStop', channelId))) return;
+            await channelAction(serverId, channelId, 'stop');
+        }
+
+        async function startChannel(serverId, channelId) {
+            await channelAction(serverId, channelId, 'start');
+        }
+
+        async function channelAction(serverId, channelId, action) {
+            const actionKey = `${serverId}-${channelId}`;
+            pendingActions.add(actionKey);
+            renderServers();
+            
+            try {
+                const resp = await fetch(
+                    `/api/servers/${serverId}/channels/${channelId}/${action}`,
+                    { method: 'POST' }
+                );
+                if (!resp.ok) {
+                    const data = await resp.json();
+                    throw new Error(data.detail || `HTTP ${resp.status}`);
+                }
+                await fetchServers();
+            } catch (e) {
+                showError(`${t('actionError')}: ${e.message}`);
+            } finally {
+                pendingActions.delete(actionKey);
+                renderServers();
+            }
+        }
+
+        async function refreshAll() {
+            const icon = document.getElementById('refreshIcon');
+            icon.classList.add('spinning');
+            await fetchServers();
+            setTimeout(() => icon.classList.remove('spinning'), 500);
+        }
+
+        function showError(msg) {
+            const el = document.getElementById('error');
+            el.textContent = msg;
+            el.style.display = 'block';
+            setTimeout(() => el.style.display = 'none', 5000);
+        }
+
+        function hideError() {
+            document.getElementById('error').style.display = 'none';
+        }
+
+        // ==================== 初始化 ====================
+        document.getElementById('langSelect').value = currentLang;
+        updateStaticTexts();
+        fetchServers();
+        setRefreshInterval(currentInterval);
     </script>
-  </body>
+</body>
 </html>

@@ -1,14 +1,25 @@
-[
-  {
-    "id": "1",
-    "name": "Server 1",
-    "host": "192.168.2.172",
-    "port": 8888
-  },
+{
+  "servers": [
     {
-    "id": "2",
-    "name": "Server 2",
-    "host": "192.168.2.172",
-    "port": 8888
-  }
-]
+      "id": "server-01",
+      "name": "Transcoder1",
+      "host": "192.168.2.172",
+      "port": 8888,
+      "description": "主要生产节点"
+    },
+    {
+      "id": "server-02",
+      "name": "Transcoder2",
+      "host": "192.168.2.172",
+      "port": 8888,
+      "description": "备用生产节点"
+    },
+    {
+      "id": "server-03",
+      "name": "测试服务器",
+      "host": "192.168.1.200",
+      "port": 9527,
+      "description": "测试环境"
+    }
+  ]
+}

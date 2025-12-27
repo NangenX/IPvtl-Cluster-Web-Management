@@ -1,93 +1,70 @@
-import asyncio
-import json
-from fastapi import FastAPI, Request
-from fastapi.middleware.cors import CORSMiddleware
+"""FastAPI 应用入口"""
+import logging
+from contextlib import asynccontextmanager
+from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
-from fastapi.templating import Jinja2Templates
-from fastapi.responses import JSONResponse
-
-from app.api import servers as servers_api
+from fastapi.responses import FileResponse
 from app.config import settings
-from app.exceptions import IPvtlException, ServerNotFoundException, ChannelOperationException
-from app.logging_config import setup_logging, get_logger
-from app.models import Server
-from app.services.poller import Poller
+from app.models import HealthResponse
+from app.api.servers import router as servers_router
+from app.services.poller import poller_service
+from app.services.manager import manager_service
 
-logger = get_logger(__name__)
+# 配置日志
+logging.basicConfig(
+    level=logging.DEBUG if settings.debug else logging.INFO,
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+)
+logger = logging.getLogger(__name__)
 
-app = FastAPI()
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """应用生命周期管理"""
+    # 启动时
+    logger.info(f"Starting {settings.app_name} v{settings.app_version}")
+    await poller_service.start()
+    await manager_service.start()
+    yield
+    # 关闭时
+    logger.info("Shutting down...")
+    await manager_service.stop()
+    await poller_service.stop()
 
-# Add global exception handlers
-@app.exception_handler(ServerNotFoundException)
-async def server_not_found_handler(request: Request, exc: ServerNotFoundException):
-    logger.warning(f"Server not found: {exc.server_id}")
-    return JSONResponse(
-        status_code=404,
-        content={"detail": exc.message}
-    )
-
-
-@app.exception_handler(ChannelOperationException)
-async def channel_operation_handler(request: Request, exc: ChannelOperationException):
-    logger.error(f"Channel operation failed: {exc.message}")
-    return JSONResponse(
-        status_code=500,
-        content={"detail": exc.message}
-    )
-
-
-@app.exception_handler(IPvtlException)
-async def ipvtl_exception_handler(request: Request, exc: IPvtlException):
-    logger.error(f"IPvtl exception: {exc.message}")
-    return JSONResponse(
-        status_code=500,
-        content={"detail": exc.message}
-    )
-
-
-app.include_router(servers_api.router)
-
-templates = Jinja2Templates(directory="frontend")
-app.mount("/static", StaticFiles(directory="frontend"), name="static")
-
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],  # 允许所有来源，生产环境建议限制具体域名
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+# 创建应用
+app = FastAPI(
+    title=settings.app_name,
+    version=settings.app_version,
+    lifespan=lifespan
 )
 
+# 注册 API 路由
+app.include_router(servers_router)
 
-def load_servers_from_config():
-    try:
-        with open(settings.SERVERS_CONFIG_PATH, "r", encoding="utf-8") as f:
-            data = json.load(f)
-            return [Server(**s) for s in data]
-    except Exception:
-        return []
+# 健康检查端点
+@app.get("/health", response_model=HealthResponse, tags=["system"])
+async def health_check():
+    """健康检查"""
+    return HealthResponse(
+        status="ok",
+        version=settings.app_version,
+        servers_count=len(poller_service._servers),
+        poll_interval=settings.poll_interval
+    )
 
+# 挂载静态文件
+app.mount("/static", StaticFiles(directory="frontend"), name="static")
 
-@app.on_event("startup")
-async def startup_event():
-    setup_logging()
-    logger.info("Starting application...")
-    servers = load_servers_from_config()
-    logger.info(f"Loaded {len(servers)} servers from configuration")
-    app.state.poller = Poller(servers)
-    await app.state.poller.start()
-    logger.info("Poller started successfully")
-
-
-@app.on_event("shutdown")
-async def shutdown_event():
-    logger.info("Shutting down application...")
-    poller = getattr(app.state, "poller", None)
-    if poller:
-        await poller.stop()
-        logger.info("Poller stopped successfully")
-
-
+# 前端入口
 @app.get("/")
-async def index(request: Request):
-    return templates.TemplateResponse("index.html", {"request": request})
+async def index():
+    """返回前端页面"""
+    return FileResponse("frontend/index.html")
+
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run(
+        "app.main:app",
+        host="0.0.0.0",
+        port=8000,
+        reload=settings.debug
+    )
